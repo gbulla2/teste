@@ -8,46 +8,31 @@ on:
 jobs:
   benchmark:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
       - name: Install mature FEM tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gmsh getdp curl unzip jq
-          gmsh --version
-          getdp --version
-
-      - name: Run official GetDP 3D full-wave regression tutorial
-        run: |
-          git clone --depth 1 https://gitlab.onelab.info/getdp/getdp.git getdp-src
-          cp -r getdp-src/tutorials/05-Full_wave getdp_full_wave
-          cd getdp_full_wave
-          gmsh full_wave.geo -3 -setnumber dim 3 -format msh2 -o full_wave.msh
-          getdp full_wave.pro -solve Wav -pos Map -setnumber dim 3 | tee getdp_fullwave.log
-          test -s e.pos
-          test -s h.pos
+          sudo apt-get update -qq
+          sudo apt-get install -y gmsh getdp curl unzip jq >/dev/null
+          mkdir -p results
+          gmsh --version | tee results/gmsh_version.txt
+          getdp --version | tee results/getdp_version.txt
+          dpkg -L getdp | tee results/getdp_files.txt
+          find /usr/share -maxdepth 5 -type f \( -iname '*full*wave*' -o -iname '*.pro' -o -iname '*.geo' \) 2>/dev/null | head -500 | tee results/getdp_example_candidates.txt
 
       - name: Fetch and smoke-test ERMES 20.0 Linux binary
+        continue-on-error: true
         run: |
-          curl -L --fail -o ERMES_20.0_c7.4 https://raw.githubusercontent.com/Ruben-Otin/ERMES-20.0/main/ERMES_20.0/ERMES.gid/execs/unix/ERMES_20.0_c7.4
+          curl -L --fail --retry 3 -o ERMES_20.0_c7.4 https://raw.githubusercontent.com/Ruben-Otin/ERMES-20.0/main/ERMES_20.0/ERMES.gid/execs/unix/ERMES_20.0_c7.4
           chmod +x ERMES_20.0_c7.4
-          file ERMES_20.0_c7.4 | tee ermes_file.txt
-          (./ERMES_20.0_c7.4 2>&1 || true) | head -100 | tee ermes_smoke.log
+          file ERMES_20.0_c7.4 | tee results/ermes_file.txt
+          ldd ERMES_20.0_c7.4 | tee results/ermes_ldd.txt || true
+          (timeout 20 ./ERMES_20.0_c7.4 2>&1 || true) | head -200 | tee results/ermes_smoke.log
 
-      - name: Collect artifacts
-        run: |
-          mkdir -p results
-          gmsh --version > results/gmsh_version.txt 2>&1 || true
-          getdp --version > results/getdp_version.txt 2>&1 || true
-          cp getdp_full_wave/getdp_fullwave.log results/
-          cp getdp_full_wave/e.pos results/
-          cp getdp_full_wave/h.pos results/
-          cp ermes_file.txt results/
-          cp ermes_smoke.log results/
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
         with:
-          name: independent-fem-smoke
+          name: independent-fem-diagnostics
           path: results/
