@@ -1,0 +1,53 @@
+name: Independent Maxwell FEM benchmark
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mature FEM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gmsh getdp curl unzip jq
+          gmsh --version
+          getdp --version
+
+      - name: Run official GetDP 3D full-wave regression tutorial
+        run: |
+          git clone --depth 1 https://gitlab.onelab.info/getdp/getdp.git getdp-src
+          cp -r getdp-src/tutorials/05-Full_wave getdp_full_wave
+          cd getdp_full_wave
+          gmsh full_wave.geo -3 -setnumber dim 3 -format msh2 -o full_wave.msh
+          getdp full_wave.pro -solve Wav -pos Map -setnumber dim 3 | tee getdp_fullwave.log
+          test -s e.pos
+          test -s h.pos
+
+      - name: Fetch and smoke-test ERMES 20.0 Linux binary
+        run: |
+          curl -L --fail -o ERMES_20.0_c7.4 https://raw.githubusercontent.com/Ruben-Otin/ERMES-20.0/main/ERMES_20.0/ERMES.gid/execs/unix/ERMES_20.0_c7.4
+          chmod +x ERMES_20.0_c7.4
+          file ERMES_20.0_c7.4 | tee ermes_file.txt
+          (./ERMES_20.0_c7.4 2>&1 || true) | head -100 | tee ermes_smoke.log
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p results
+          gmsh --version > results/gmsh_version.txt 2>&1 || true
+          getdp --version > results/getdp_version.txt 2>&1 || true
+          cp getdp_full_wave/getdp_fullwave.log results/
+          cp getdp_full_wave/e.pos results/
+          cp getdp_full_wave/h.pos results/
+          cp ermes_file.txt results/
+          cp ermes_smoke.log results/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: independent-fem-smoke
+          path: results/
