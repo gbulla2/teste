@@ -102,6 +102,7 @@ PostProcessing {
   { Name Wav; NameOfFormulation FullWave;
     Quantity {
       { Name e; Value { Term { [ {e} ]; In Vol; Jacobian Jac; } } }
+      { Name ez; Value { Term { [ CompZ[{e}] ]; In Vol; Jacobian Jac; } } }
     }
   }
 }
@@ -109,7 +110,7 @@ PostProcessing {
 PostOperation {
   { Name Port; NameOfPostProcessing Wav;
     Operation {
-      Print[e, OnLine{{feedx,0,0}{feedx,0,h}}{31}, Format Table, File "port_line.txt"];
+      Print[ez, OnLine{{feedx,0,0}{feedx,0,h}}{31}, Format Table, File "port_ez.txt"];
     }
   }
 }
