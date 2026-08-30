@@ -13,7 +13,7 @@ for line in open(path):
     e.append(float(p[-2]) + 1j*float(p[-1]))
 z=np.asarray(z); e=np.asarray(e)
 o=np.argsort(z); z=z[o]; e=e[o]
-V=-np.trapezoid(e,z)
+V=-np.trapz(e,z)
 Z=V  # impressed current is exactly 1 A
 S=(Z-50.0)/(Z+50.0)
 s11=20*np.log10(abs(S)+1e-30)
