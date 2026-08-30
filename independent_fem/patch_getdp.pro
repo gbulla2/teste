@@ -1,12 +1,12 @@
 // Independent frequency-domain Maxwell benchmark for the finite PCB patch.
 // Convention: exp(+i omega t), matching the official GetDP full-wave tutorial.
 Group {
-  Domain = Region[1000];
+  Air = Region[1000];
   Substrate = Region[1001];
   PortVol = Region[1002];
   PEC = Region[2000];
   ABC = Region[2002];
-  Vol = Region[Domain];
+  Vol = Region[{Air,Substrate,PortVol}];
   SurInf = Region[ABC];
   DomHcurl = Region[{Vol,SurInf}];
 }
@@ -22,14 +22,15 @@ Function {
     feedx={-6e-3, Name "Parameters/feed x [m]"},
     h={3e-3, Name "Parameters/substrate h [m]"}
   ];
-  epsilon[Region[Domain]]=eps0;
-  epsilon[Region[Substrate]]=epsr*eps0;
-  epsilon[Region[ABC]]=eps0;
+  epsilon[Air]=eps0;
+  epsilon[Substrate]=epsr*eps0;
+  epsilon[PortVol]=epsr*eps0;
+  epsilon[ABC]=eps0;
   mu[]=mu0;
   nu[]=1/mu0;
   omega=2*Pi*f;
   // 1-A impressed current through the feed prism: Jz=I/A.
-  Jsrc[Region[PortVol]]=Vector[0,0,1/(feedw*feedw)];
+  Jsrc[PortVol]=Vector[0,0,1/(feedw*feedw)];
 }
 
 Jacobian {
