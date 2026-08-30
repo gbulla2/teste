@@ -15,7 +15,7 @@ jobs:
       - name: Install Gmsh and GetDP
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gmsh getdp python3 >/dev/null
+          sudo apt-get install -y gmsh getdp python3 python3-numpy >/dev/null
           mkdir -p results
           gmsh --version | tee results/gmsh_version.txt
           getdp --version | tee results/getdp_version.txt
@@ -23,20 +23,60 @@ jobs:
       - name: Mesh conformal patch
         run: |
           cd independent_fem
-          gmsh patch_getdp.geo -3 -format msh2 -clscale 2.0 -setnumber Lpatch 0.022 -o patch_getdp.msh 2>&1 | tee ../results/gmsh_patch.log
+          gmsh patch_getdp.geo -3 -format msh2 -clscale 2.0 -setnumber Lpatch 0.022 -o patch_getdp.msh -v 2
           ls -lh patch_getdp.msh | tee ../results/mesh_size.txt
-          grep -A20 '\$PhysicalNames' patch_getdp.msh | head -30 | tee ../results/physical_names.txt
           awk '/\$Elements/{getline; print "elements",$1}' patch_getdp.msh | tee ../results/mesh_elements.txt
 
-      - name: Solve 2.4 GHz with converged MUMPS direct solve
+      - name: Frequency sweep with converged direct solves
         run: |
           cd independent_fem
-          timeout 300 getdp patch_getdp.pro -solve Wav -pos Port -setnumber f 2.4e9 -v 4 2>&1 | tee ../results/getdp_2p4.log
-          test -s port_ez.txt
-          cp port_ez.txt ../results/port_ez_2p4.txt
-          head -8 port_ez.txt | tee ../results/port_ez_head.txt
+          printf 'f_GHz,Rin,Xin,S11_dB\n' > ../results/getdp_sweep.csv
+          for fMHz in $(seq 1800 25 2700); do
+            fHz=$((fMHz * 1000000))
+            rm -f port_ez.txt
+            timeout 180 getdp patch_getdp.pro -solve Wav -pos Port -setnumber f ${fHz} -v 2 >/tmp/getdp_${fMHz}.log 2>&1
+            test -s port_ez.txt
+            python3 - "$fMHz" <<'PY' >> ../results/getdp_sweep.csv
+import sys, numpy as np
+fMHz=float(sys.argv[1])
+z=[]; e=[]
+for line in open('port_ez.txt'):
+    p=line.split()
+    if len(p) < 10: continue
+    z.append(float(p[4]))
+    e.append(float(p[-2]) + 1j*float(p[-1]))
+z=np.asarray(z); e=np.asarray(e)
+o=np.argsort(z); z=z[o]; e=e[o]
+V=-np.trapezoid(e,z)
+Z=V  # source current = 1 A
+S=(Z-50)/(Z+50)
+print(f'{fMHz/1000:.6f},{Z.real:.12g},{Z.imag:.12g},{20*np.log10(abs(S)+1e-30):.12g}')
+PY
+            echo "done ${fMHz} MHz"
+          done
+          cat ../results/getdp_sweep.csv
+
+      - name: Analyze competing resonances
+        run: |
+          python3 - <<'PY'
+import csv, math
+rows=[]
+with open('results/getdp_sweep.csv') as f:
+    for r in csv.DictReader(f):
+        rows.append({k:float(v) for k,v in r.items()})
+best=min(rows,key=lambda r:r['S11_dB'])
+near207=min(rows,key=lambda r:abs(r['f_GHz']-2.07))
+near242=min(rows,key=lambda r:abs(r['f_GHz']-2.421))
+with open('results/getdp_summary.txt','w') as f:
+    f.write('best='+repr(best)+'\n')
+    f.write('near_2p07='+repr(near207)+'\n')
+    f.write('near_2p421='+repr(near242)+'\n')
+print('best',best)
+print('near 2.07',near207)
+print('near 2.421',near242)
+PY
 
       - uses: actions/upload-artifact@v4
         with:
-          name: getdp-patch-direct-2p4
+          name: getdp-patch-sweep-1p8-2p7
           path: results/
