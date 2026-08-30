@@ -12,29 +12,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install mature FEM tools
+      - name: Install Gmsh and GetDP
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gmsh getdp curl unzip jq git >/dev/null
+          sudo apt-get install -y gmsh getdp python3 >/dev/null
           mkdir -p results
           gmsh --version | tee results/gmsh_version.txt
           getdp --version | tee results/getdp_version.txt
 
-      - name: Clone ERMES and run shipped Microwave_Filter example
+      - name: Mesh conformal patch
         run: |
-          git clone --depth 1 https://github.com/Ruben-Otin/ERMES-20.0.git ermesrepo
-          cp ermesrepo/ERMES_20.0/ERMES.gid/execs/unix/ERMES_20.0_c7.4 ./ERMES_20.0_c7.4
-          chmod +x ERMES_20.0_c7.4
-          cd ermesrepo/Examples/Microwave_Filter.gid
-          cp ../../../ERMES_20.0_c7.4 .
-          ls -lah | tee ../../../results/microwave_filter_files_before.txt
-          (timeout 180 ./ERMES_20.0_c7.4 Microwave_Filter 2>&1 || true) | tee ../../../results/ermes_microwave_filter.log
-          ls -lah | tee ../../../results/microwave_filter_files_after.txt
-          find . -maxdepth 1 -type f -newermt '2 minutes ago' -print | sort | tee ../../../results/microwave_filter_new_files.txt
-          cp -a . ../../../results/Microwave_Filter_after
+          cd independent_fem
+          gmsh patch_current_v2.geo -3 -format msh2 -setnumber Lpatch 0.022 -o patch_getdp.msh 2>&1 | tee ../results/gmsh_patch.log
+          ls -lh patch_getdp.msh
+          grep -A20 '\$PhysicalNames' patch_getdp.msh | head -30 | tee ../results/physical_names.txt
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Solve one GetDP frequency and inspect port line
+        run: |
+          cd independent_fem
+          getdp patch_getdp.pro -solve Wav -pos Port -setnumber f 2.4e9 -v 4 2>&1 | tee ../results/getdp_2p4.log
+          test -s port_line.txt
+          cp port_line.txt ../results/port_line_2p4.txt
+          echo '--- port_line head ---'
+          head -20 port_line.txt
+          echo '--- port_line tail ---'
+          tail -10 port_line.txt
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: ermes-microwave-filter-run
+          name: getdp-patch-smoke
           path: results/
