@@ -23,24 +23,20 @@ jobs:
       - name: Mesh conformal patch
         run: |
           cd independent_fem
-          gmsh patch_getdp.geo -3 -format msh2 -clscale 1.5 -setnumber Lpatch 0.022 -o patch_getdp.msh 2>&1 | tee ../results/gmsh_patch.log
+          gmsh patch_getdp.geo -3 -format msh2 -clscale 2.0 -setnumber Lpatch 0.022 -o patch_getdp.msh 2>&1 | tee ../results/gmsh_patch.log
           ls -lh patch_getdp.msh | tee ../results/mesh_size.txt
           grep -A20 '\$PhysicalNames' patch_getdp.msh | head -30 | tee ../results/physical_names.txt
           awk '/\$Elements/{getline; print "elements",$1}' patch_getdp.msh | tee ../results/mesh_elements.txt
 
-      - name: Solve one GetDP frequency and inspect port line
+      - name: Solve 2.4 GHz with converged MUMPS direct solve
         run: |
           cd independent_fem
-          timeout 300 getdp patch_getdp.pro -solve Wav -pos Port -setnumber f 2.4e9 -v 4 \
-            -ksp_type gmres -pc_type ilu -ksp_rtol 1e-8 -ksp_max_it 1000 2>&1 | tee ../results/getdp_2p4.log
-          test -s port_line.txt
-          cp port_line.txt ../results/port_line_2p4.txt
-          echo '--- port_line head ---'
-          head -20 port_line.txt
-          echo '--- port_line tail ---'
-          tail -10 port_line.txt
+          timeout 300 getdp patch_getdp.pro -solve Wav -pos Port -setnumber f 2.4e9 -v 4 2>&1 | tee ../results/getdp_2p4.log
+          test -s port_ez.txt
+          cp port_ez.txt ../results/port_ez_2p4.txt
+          head -8 port_ez.txt | tee ../results/port_ez_head.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: getdp-patch-smoke-fast
+          name: getdp-patch-direct-2p4
           path: results/
