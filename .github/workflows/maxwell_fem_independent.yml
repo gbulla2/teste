@@ -23,7 +23,7 @@ jobs:
       - name: Mesh conformal patch
         run: |
           cd independent_fem
-          gmsh patch_current_v2.geo -3 -format msh2 -clscale 1.5 -setnumber Lpatch 0.022 -o patch_getdp.msh 2>&1 | tee ../results/gmsh_patch.log
+          gmsh patch_getdp.geo -3 -format msh2 -clscale 1.5 -setnumber Lpatch 0.022 -o patch_getdp.msh 2>&1 | tee ../results/gmsh_patch.log
           ls -lh patch_getdp.msh | tee ../results/mesh_size.txt
           grep -A20 '\$PhysicalNames' patch_getdp.msh | head -30 | tee ../results/physical_names.txt
           awk '/\$Elements/{getline; print "elements",$1}' patch_getdp.msh | tee ../results/mesh_elements.txt
