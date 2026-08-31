@@ -31,17 +31,18 @@ sz1()=Surface In BoundingBox{-boxL/2-1e-7,-boxW/2-1e-7,zbot-1e-7,boxL/2+1e-7,box
 sz2()=Surface In BoundingBox{-boxL/2-1e-7,-boxW/2-1e-7,zbot+boxH-1e-7,boxL/2+1e-7,boxW/2+1e-7,zbot+boxH+1e-7};
 Physical Surface("ABC",2002)={sx1(),sx2(),sy1(),sy2(),sz1(),sz2()};
 
-// Single conformal edge from ground to patch.  The endpoints are explicitly
-// embedded in the two conductor sheets; otherwise Gmsh sees a segment/facet
-// intersection at z=0,h instead of a topologically connected port edge.
-Point(5001)={feedx,0,0,lcFine};
-Point(5002)={feedx,0,h,lcFine};
-Line(5001)={5001,5002};
-Point{5001} In Surface{gnd()};
-Point{5002} In Surface{pat()};
-Curve{5001} In Volume{3};
-Transfinite Curve{5001}=2;
-Physical Curve("PortEdge",3000)={5001};
+// Use the four pre-existing vertical edges of the 2 mm x 2 mm port prism.
+// They are already conformal with both the z=0 ground and z=h patch surfaces.
+// One shared global coefficient on this group imposes the same terminal voltage
+// on all four edge paths; the associated global current is their total current.
+eps=1e-7;
+xlo=feedx-feedw/2; xhi=feedx+feedw/2;
+ylo=-feedw/2; yhi=feedw/2;
+pe1()=Curve In BoundingBox{xlo-eps,ylo-eps,-eps,xlo+eps,ylo+eps,h+eps};
+pe2()=Curve In BoundingBox{xlo-eps,yhi-eps,-eps,xlo+eps,yhi+eps,h+eps};
+pe3()=Curve In BoundingBox{xhi-eps,ylo-eps,-eps,xhi+eps,ylo+eps,h+eps};
+pe4()=Curve In BoundingBox{xhi-eps,yhi-eps,-eps,xhi+eps,yhi+eps,h+eps};
+Physical Curve("PortEdge",3000)={pe1(),pe2(),pe3(),pe4()};
 
 Mesh.MeshSizeMin=1*mm; Mesh.MeshSizeMax=lc;
 Field[1]=Box; Field[1].VIn=lcFine; Field[1].VOut=lc;
