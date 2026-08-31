@@ -45,14 +45,9 @@ jobs:
       - name: Refine best minimum, 10 MHz
         run: |
           cd independent_fem
-          bestMHz=$(python3 - <<'PY'
-import csv
-r=list(csv.DictReader(open('../results/getdp_lumped_sweep.csv')))
-b=min(r,key=lambda x:float(x['S11_dB']))
-print(int(round(float(b['f_GHz'])*1000)))
-PY
-          )
-          start=$((bestMHz-150)); stop=$((bestMHz+150))
+          bestMHz=$(cat ../results/best_mhz.txt)
+          start=$((bestMHz-150))
+          stop=$((bestMHz+150))
           printf 'f_GHz,Ireal_A,Iimag_A,Rin,Xin,Zmag,S11_dB\n' > ../results/getdp_lumped_refined.csv
           for fMHz in $(seq ${start} 10 ${stop}); do
             fHz=$((fMHz * 1000000))
@@ -61,12 +56,8 @@ PY
             test -s port_I.txt
             python3 parse_lumped_port.py ${fMHz} port_I.txt >> ../results/getdp_lumped_refined.csv
           done
-          python3 - <<'PY' | tee ../results/getdp_lumped_refined_summary.txt
-import csv
-r=list(csv.DictReader(open('../results/getdp_lumped_refined.csv')))
-b=min(r,key=lambda x:float(x['S11_dB']))
-print('refined_best',b)
-PY
+          python3 analyze_lumped_refined.py
+          cat ../results/getdp_lumped_refined_summary.txt
 
       - uses: actions/upload-artifact@v4
         with:
