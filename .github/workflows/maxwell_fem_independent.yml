@@ -23,22 +23,52 @@ jobs:
       - name: Mesh explicit two-terminal port
         run: |
           cd independent_fem
-          gmsh patch_getdp_lumped.geo -3 -format msh2 -clscale 2.0 -setnumber Lpatch 0.022 -o patch_getdp_lumped.msh -v 3 2>&1 | tee ../results/gmsh_lumped.log
-          grep -A20 '\$PhysicalNames' patch_getdp_lumped.msh | tee ../results/physical_names.txt
+          gmsh patch_getdp_lumped.geo -3 -format msh2 -clscale 2.0 -setnumber Lpatch 0.022 -o patch_getdp_lumped.msh -v 2
+          ls -lh patch_getdp_lumped.msh | tee ../results/mesh_size.txt
           awk '/\$Elements/{getline; print "elements",$1}' patch_getdp_lumped.msh | tee ../results/mesh_elements.txt
 
-      - name: Solve explicit 1 V terminal port at 2.4 GHz
+      - name: Coarse sweep 1.5-4.5 GHz, 50 MHz
         run: |
           cd independent_fem
-          rm -f port_V.txt port_I.txt
-          timeout 300 getdp patch_getdp_lumped.pro -msh patch_getdp_lumped.msh -solve Wav -pos Port -setnumber f 2.4e9 -v 4 2>&1 | tee ../results/getdp_lumped_2p4.log
-          test -s port_V.txt
-          test -s port_I.txt
-          cp port_V.txt port_I.txt ../results/
-          echo '--- V ---'; cat port_V.txt
-          echo '--- I ---'; cat port_I.txt
+          printf 'f_GHz,Ireal_A,Iimag_A,Rin,Xin,Zmag,S11_dB\n' > ../results/getdp_lumped_sweep.csv
+          for fMHz in $(seq 1500 50 4500); do
+            fHz=$((fMHz * 1000000))
+            rm -f port_V.txt port_I.txt
+            timeout 150 getdp patch_getdp_lumped.pro -msh patch_getdp_lumped.msh -solve Wav -pos Port -setnumber f ${fHz} -v 1 >/tmp/getdp_lumped_${fMHz}.log 2>&1
+            test -s port_I.txt
+            python3 parse_lumped_port.py ${fMHz} port_I.txt >> ../results/getdp_lumped_sweep.csv
+            echo "done ${fMHz} MHz"
+          done
+          python3 analyze_lumped_sweep.py
+          cat ../results/getdp_lumped_summary.txt
+
+      - name: Refine best minimum, 10 MHz
+        run: |
+          cd independent_fem
+          bestMHz=$(python3 - <<'PY'
+import csv
+r=list(csv.DictReader(open('../results/getdp_lumped_sweep.csv')))
+b=min(r,key=lambda x:float(x['S11_dB']))
+print(int(round(float(b['f_GHz'])*1000)))
+PY
+          )
+          start=$((bestMHz-150)); stop=$((bestMHz+150))
+          printf 'f_GHz,Ireal_A,Iimag_A,Rin,Xin,Zmag,S11_dB\n' > ../results/getdp_lumped_refined.csv
+          for fMHz in $(seq ${start} 10 ${stop}); do
+            fHz=$((fMHz * 1000000))
+            rm -f port_V.txt port_I.txt
+            timeout 150 getdp patch_getdp_lumped.pro -msh patch_getdp_lumped.msh -solve Wav -pos Port -setnumber f ${fHz} -v 1 >/tmp/getdp_ref_${fMHz}.log 2>&1
+            test -s port_I.txt
+            python3 parse_lumped_port.py ${fMHz} port_I.txt >> ../results/getdp_lumped_refined.csv
+          done
+          python3 - <<'PY' | tee ../results/getdp_lumped_refined_summary.txt
+import csv
+r=list(csv.DictReader(open('../results/getdp_lumped_refined.csv')))
+b=min(r,key=lambda x:float(x['S11_dB']))
+print('refined_best',b)
+PY
 
       - uses: actions/upload-artifact@v4
         with:
-          name: getdp-explicit-lumped-port-smoke
+          name: getdp-explicit-lumped-port-sweep
           path: results/
